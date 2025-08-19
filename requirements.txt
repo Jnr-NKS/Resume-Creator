@@ -1,0 +1,6 @@
+streamlit
+tempfile
+PyMuPDF
+python-docx
+python-pptx
+google-generativeai
