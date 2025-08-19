@@ -177,36 +177,64 @@ def fill_ppt(template_file, data, output_path):
     prs.save(output_path)
 
 # --------------------------
-# Streamlit App
+# Streamlit App with API Key Gate
 # --------------------------
-st.title("Resume Creation Tool")
+st.set_page_config(page_title="Resume Creation Tool", layout="centered")
 
-resume_file = st.file_uploader("Upload Resume (PDF/DOCX)", type=["pdf", "docx"])
-jd_text_input = st.text_area("Paste Job Description here", height=200)
+if "api_key" not in st.session_state:
+    st.session_state.api_key = None
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 
-TEMPLATE_PATH = "EY PPT Template.pptx"
+# Step 1: API Key Screen
+if not st.session_state.authenticated:
+    st.title("🔑 Enter Gemini API Key")
+    api_key_input = st.text_input("Gemini API Key", type="password")
 
-if st.button("Generate Candidate PPT"):
-    if resume_file and jd_text_input.strip():
-        resume_text = read_file(resume_file)
-        jd_text = jd_text_input.strip()
-
-        st.write("Generating structured data...")
-        raw = generate_structured_resume(resume_text, jd_text)
-
+    if st.button("Validate API Key"):
         try:
-            data = json.loads(raw)
-        except Exception:
-            st.error("Gemini output not valid JSON.")
-            st.text_area("Raw Output", raw)
-            data = None
+            genai.configure(api_key=api_key_input)
+            test_model = genai.GenerativeModel("gemini-1.5-flash")
+            test_model.generate_content("Hello")  # simple test call
+            st.session_state.api_key = api_key_input
+            st.session_state.authenticated = True
+            st.success("API Key validated successfully! 🚀")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Invalid API Key or API Error: {e}")
 
-        if data:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx") as tmp_ppt:
-                output_path = tmp_ppt.name
-            fill_ppt(TEMPLATE_PATH, data, output_path)
+# Step 2: Main Resume Tool (only if authenticated)
+else:
+    st.title("Resume Creation Tool")
+    genai.configure(api_key=st.session_state.api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
-            with open(output_path, "rb") as f:
-                st.download_button("Download Candidate PPT", f, file_name="Candidate_Profile.pptx")
-    else:
-        st.warning("Please upload Resume and paste JD.")
+    resume_file = st.file_uploader("Upload Resume (PDF/DOCX)", type=["pdf", "docx"])
+    jd_text_input = st.text_area("Paste Job Description here", height=200)
+
+    TEMPLATE_PATH = "EY PPT Template.pptx"
+
+    if st.button("Generate Candidate PPT"):
+        if resume_file and jd_text_input.strip():
+            resume_text = read_file(resume_file)
+            jd_text = jd_text_input.strip()
+
+            st.write("Generating structured data...")
+            raw = generate_structured_resume(resume_text, jd_text)
+
+            try:
+                data = json.loads(raw)
+            except Exception:
+                st.error("Gemini output not valid JSON.")
+                st.text_area("Raw Output", raw)
+                data = None
+
+            if data:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pptx") as tmp_ppt:
+                    output_path = tmp_ppt.name
+                fill_ppt(TEMPLATE_PATH, data, output_path)
+
+                with open(output_path, "rb") as f:
+                    st.download_button("Download Candidate PPT", f, file_name="Candidate_Profile.pptx")
+        else:
+            st.warning("Please upload Resume and paste JD.")
